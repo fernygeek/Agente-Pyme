@@ -2,15 +2,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from smolagents import ToolCallingAgent, LiteLLMModel
 import time
-
 import json
-
 import logging
-
 import asyncio
 from starlette.concurrency import run_in_threadpool
 import uuid
-
 import warnings
 
 from tools import respuesta_final, consultar
@@ -20,62 +16,83 @@ from tools import respuesta_final, consultar
 # LLM + AGENTE
 # =========================
 llm = LiteLLMModel(
-    model_id="ollama_chat/qwen3:1.7b", # el modelo en Ollma
-    api_base="http://localhost:11434", # Ollama local
-    api_key="ollama",                  # api_key dummy
+    model_id="ollama_chat/qwen3:1.7b",  # el modelo en Ollama
+    api_base="http://localhost:11434",  # Ollama local
+    api_key="ollama",                   # api_key dummy
     temperature=0.2,
-    response_format={"type": "json_object"}, # fuerza JSON
+    response_format={"type": "json_object"},  # fuerza JSON cuando llama tools
 )
 
 agent = ToolCallingAgent(
     tools=[respuesta_final, consultar],
     model=llm,
-    max_steps=4, #pasos en el razonamiento
+    max_steps=4,  # pasos en el razonamiento
 )
 
-#instrucciones del agente
+# =========================
+# INSTRUCCIONES DEL AGENTE
+# =========================
 instrucciones = (
-    "Eres un agente asistente de una PyME dedicada a la venta de electrodomésticos. "
-    "Tu función es apoyar la gestión del negocio, inventario, clientes, proveedores "
-    "y brindar sugerencias comerciales relacionadas exclusivamente con este contexto."
-    "Antes de responder, determina si la pregunta pertenece al dominio permitido.\n\n"
+    "Eres un agente asistente de una PyME dedicada a la venta de repuestos automotrices en Ecuador. "
+    "Tu función es apoyar la gestión del negocio (inventario, proveedores y movimientos de inventario) "
+    "y brindar información y sugerencias comerciales SOLO dentro de este contexto.\n\n"
+
+    "IDIOMA OBLIGATORIO:\n"
+    "- Responde SIEMPRE en español latino (neutral).\n"
+    "- Usa un lenguaje claro, profesional y comprensible para un negocio de repuestos automotrices.\n\n"
+
+    "MONEDA Y UNIDADES (OBLIGATORIO):\n"
+    "- La moneda oficial del sistema es DÓLARES ESTADOUNIDENSES (USD) y se representa con '$'.\n"
+    "- Todos los precios, costos, totales y montos deben mostrarse exclusivamente en USD.\n"
+    "- Si el usuario menciona otra moneda (EUR, etc.), NO conviertas automáticamente.\n"
+    "- Solo realiza conversión si el usuario lo solicita explícitamente; si no indica el tipo de cambio, "
+    "debes pedirlo o aclarar el supuesto antes de convertir.\n\n"
 
     "DOMINIO PERMITIDO:\n"
-    "- Información de la base de datos del negocio (productos, clientes, proveedores).\n"
-    "- Consultas de inventario, stock, precios, proveedores.\n"
-    "- Sugerencias y recomendaciones relacionadas al negocio de electrodomésticos "
-    "(ventas, atención al cliente, organización de inventario).\n\n"
+    "- Información obtenida ÚNICAMENTE de la base de datos del negocio "
+    "(Producto, Proveedor, MovimientoInventario).\n"
+    "- Consultas de inventario: stock actual, stock mínimo, precios, entradas/salidas y movimientos.\n"
+    "- Sugerencias relacionadas con reposición, rotación de inventario, productos bajo mínimo "
+    "y atención al cliente en una PyME de repuestos automotrices.\n\n"
 
     "FUERA DE CONTEXTO:\n"
     "- Si el usuario pregunta sobre temas ajenos al negocio (clima, chistes, política, "
-    "noticias generales, temas personales, etc.), responde que la pregunta está fuera "
-    "del contexto del sistema y no debes responderla.\n\n"
+    "noticias generales, temas personales, etc.), responde EXACTAMENTE:\n"
+    "\"La pregunta está fuera del contexto del sistema\".\n\n"
 
     "HERRAMIENTAS DISPONIBLES:\n"
-    "- consultar(tabla, filtro, limit): consulta la base de datos "
-    "(tabla: producto | cliente | proveedor).\n"
+    "- consultar(tabla, filtro, limit): consulta información de la base de datos "
+    "(tabla: producto | proveedor | movimiento_inventario).\n"
     "- respuesta_final(respuesta): devuelve la respuesta final al usuario.\n\n"
 
-    "REGLAS:\n"
-    "- Usa consultar SOLO cuando se requieran datos reales del sistema.\n"
-    "- No inventes información de la base de datos.\n"
-    "- No uses herramientas para preguntas fuera de contexto.\n"
-    "- Si una consulta no pertenece al dominio, indícalo claramente.\n"
-    "- Limita los resultados (usa limit entre 5 y 10 por defecto).\n\n"
+    "REGLAS DE CONSULTA (OBLIGATORIO):\n"
+    "- Usa la herramienta consultar SOLO cuando necesites datos reales de la base de datos.\n"
+    "- No inventes información que no esté en los resultados devueltos.\n"
+    "- Limita los resultados entre 5 y 10 por defecto, salvo que el usuario pida otro valor.\n"
+    "- No uses herramientas si la pregunta está fuera del dominio permitido.\n\n"
 
-    "FORMATO:\n"
+    "REGLAS DE RESPUESTA PARA PRODUCTOS (MUY IMPORTANTE):\n"
+    "- Cuando consultes la tabla Producto, SIEMPRE responde listando los resultados con este formato:\n"
+    "  • nombre_prod | marca | stock_actual (unidades)\n"
+    "- Si el nombre del producto incluye un vehículo o modelo (ej. Toyota Hilux, Chevrolet Aveo), "
+    "debes mencionarlo explícitamente en la respuesta.\n"
+    "- No respondas de forma genérica (ej. 'sí hay productos'). Siempre muestra el nombre exacto del producto.\n"
+    "- Si hay varios productos, enuméralos y luego da un breve resumen.\n"
+    "- Si no hay resultados, indícalo claramente.\n\n"
+
+    "FORMATO DE USO DE HERRAMIENTAS:\n"
     "- Si vas a usar una herramienta, responde EXCLUSIVAMENTE con un objeto JSON "
     "con las claves \"tool_name\" y \"tool_args\".\n"
     "- Si no usas herramientas, responde SOLO texto.\n\n"
 
     "ENTREGA FINAL:\n"
-    "Siempre finaliza usando la herramienta 'respuesta_final' con el mensaje al usuario.\n\n"
+    "- Siempre finaliza usando la herramienta 'respuesta_final'.\n"
+    "- La respuesta final debe estar en español latino, clara y orientada al negocio.\n\n"
 )
 
 # =========================
 # LOGS
 # =========================
-
 LOG_FILE = "monitoreo.log"
 
 logger = logging.getLogger("agent_logger")
@@ -86,9 +103,7 @@ logger.propagate = False
 
 if not logger.handlers:
     file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
@@ -99,7 +114,7 @@ def log_response(*, req_id: str, question: str, answer: str, latency_ms: float):
         req_id,
         question,
         latency_ms,
-        answer.replace("\n", " | ")
+        (answer or "").replace("\n", " | ")
     )
 
 # =========================
@@ -109,7 +124,6 @@ LLM_SEM = asyncio.Semaphore(3)  # máximo 3 llamadas LLM simultáneas
 
 async def call_llm_safely(fn, *args, req_id: str, **kwargs):
     t_wait = time.perf_counter()
-
     logger.info("REQ=%s | LLM_QUEUE_ENTER", req_id)
 
     async with LLM_SEM:
@@ -123,9 +137,8 @@ async def call_llm_safely(fn, *args, req_id: str, **kwargs):
         logger.info("REQ=%s | LLM_END | RUN_MS=%.2f", req_id, run_ms)
         return result
 
-
 # ================================
-# NORMALIZAR El RESULTADO A TEXTO
+# NORMALIZAR RESULTADO A TEXTO
 # ================================
 def to_answer_text(result) -> str:
     if isinstance(result, str):
@@ -141,7 +154,7 @@ def to_answer_text(result) -> str:
     return str(result)
 
 # =========================
-# SILENCIAR WARNINGS DE PYDANTIC (LiteLLM)
+# SILENCIAR WARNINGS (LiteLLM)
 # =========================
 warnings.filterwarnings(
     "ignore",
@@ -158,7 +171,7 @@ warnings.filterwarnings(
 # =========================
 # FASTAPI
 # =========================
-app = FastAPI(title="Agente Pyme API")
+app = FastAPI(title="Agente Pyme API (Repuestos Automotrices)")
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, description="Pregunta del usuario")
@@ -189,14 +202,10 @@ async def ask(req: AskRequest):
             latency_ms=latency_ms
         )
 
-        return AskResponse(
-            question=req.question,
-            answer=answer
-        )
+        return AskResponse(question=req.question, answer=answer)
 
     except Exception as e:
         latency_ms = (time.perf_counter() - start) * 1000
-        # si falló antes de generar req_id
         err_id = str(uuid.uuid4())[:8]
         log_response(
             req_id=err_id,
@@ -205,6 +214,7 @@ async def ask(req: AskRequest):
             latency_ms=latency_ms,
         )
         raise HTTPException(status_code=500, detail=f"Error ejecutando el agente: {e}")
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -3,16 +3,21 @@ from agente_pyme import app
 
 client = TestClient(app)
 
-def test_preguntar_al_llm():
-    # payload = {"question": "Hola podrías decirme si hay microondas"}
-    # payload = {"question": "Hola podrías decirme si hay televisores en el inventario?"}
-    # payload = {"question": "Hola podrías decirme si hay refrigeradores en el inventario?"}
-    # payload = {"question": "Hola podrías decirme si hay refrigeradores en el inventario y que marca son?"}
-    payload = {"question": "Hola podrías decirme si hay refrigeradores LG en el inventario"}
+def test_preguntar_al_agente():
+    # Ejemplos (repuestos automotrices)
+    # payload = {"question": "¿Hay pastillas de freno para Chevrolet Aveo?"}
+    # payload = {"question": "¿Qué filtros de aceite tengo en inventario?"}
+    # payload = {"question": "¿Qué repuestos tengo para Toyota Hilux?"}
+    payload = {"question": "¿Hay kits de embrague? ¿de qué marca y cuántos quedan?"}
+    # payload = {"question": "Cuéntame un chiste"}
+    # payload = {"question": "¿Hay filtros MANN para Chevrolet Spark?"}
+    # payload = {"question": "¿Hay pastillas de freno Brembo para Chevrolet Aveo? ¿Cuántas y qué stock tienen?"}
+
     r = client.post("/ask", json=payload)
 
     assert r.status_code == 200, r.text
-    print("LLM Answer:\n", r.json()["answer"])
+    data = r.json()
+    print("Agent Answer:\n", data["answer"])
 
 if __name__ == "__main__":
-    test_preguntar_al_llm()
+    test_preguntar_al_agente()
