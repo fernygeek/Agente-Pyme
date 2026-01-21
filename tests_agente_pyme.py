@@ -8,10 +8,13 @@ def test_preguntar_al_agente():
     # payload = {"question": "¿Hay pastillas de freno para Chevrolet Aveo?"}
     # payload = {"question": "¿Qué filtros de aceite tengo en inventario?"}
     # payload = {"question": "¿Qué repuestos tengo para Toyota Hilux?"}
-    payload = {"question": "¿Hay kits de embrague? ¿de qué marca y cuántos quedan?"}
-    # payload = {"question": "Cuéntame un chiste"}
-    # payload = {"question": "¿Hay filtros MANN para Chevrolet Spark?"}
+    # payload = {"question": "¿Hay kits de embrague? ¿de qué marca y cuántos quedan?"}
+    # payload = {"question": "Cuéntame una historia divertida sobre repuestos de autos."}
+    payload = {"question": "que productos estan al agotarse"}
+    # payload = {"question": "¿Hay filtros MANN?"}
     # payload = {"question": "¿Hay pastillas de freno Brembo para Chevrolet Aveo? ¿Cuántas y qué stock tienen?"}
+    # payload = {"question": "¿Qué proveedores tengo registrados y cómo puedo contactarlos?"}
+    # payload = {"question": "¿Qué productos tengo en inventario?"}
 
     r = client.post("/ask", json=payload)
 

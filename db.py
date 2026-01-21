@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 import os
+from typing import Optional, Dict, List
 
 ODBC_DRIVER = os.getenv("ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
 SERVER = os.getenv("DB_SERVER", "LAPTOP-DF414H36")
@@ -38,13 +39,13 @@ engine_rw = create_engine(DB_RW_URL, pool_pre_ping=True, future=True)
 SessionRO = sessionmaker(autocommit=False, autoflush=False, bind=engine_ro, future=True)
 SessionRW = sessionmaker(autocommit=False, autoflush=False, bind=engine_rw, future=True)
 
-def query_all_ro(sql: str, params: dict | None = None) -> list[dict]:
+def query_all_ro(sql: str, params: Optional[Dict] = None) -> List[Dict]:
     """Solo lectura (para el agente)."""
     with SessionRO() as db:
         rows = db.execute(text(sql), params or {}).mappings().all()
         return [dict(r) for r in rows]
 
-def exec_rw(sql: str, params: dict | None = None) -> int:
+def exec_rw(sql: str, params: Optional[Dict] = None) -> int:
     """
     Para endpoints RW (ventas/compras).
     Devuelve rowcount. OJO: aquí SÍ se modifica la BD.
